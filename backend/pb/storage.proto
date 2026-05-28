@@ -1,0 +1,45 @@
+// pb/storage.proto
+syntax = "proto3";
+
+// The package name used by gRPC
+package storage;
+
+// Instructs the protobuf compiler where to place the generated Go code
+option go_package = "./pb";
+
+// The GitStorage service defines all the RPC methods the Storage Node will expose.
+service GitStorage {
+  // Initializes a bare Git repository for a new project.
+  rpc InitRepo(InitRequest) returns (InitResponse);
+  
+  // Saves a new draft of a chapter as a Git commit.
+  rpc CommitDraft(CommitRequest) returns (CommitResponse);
+}
+
+// --- Messages for InitRepo ---
+
+message InitRequest {
+  // The UUID of the project, used to create the Hashed Storage path.
+  string project_uuid = 1;
+}
+
+message InitResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// --- Messages for CommitDraft ---
+
+message CommitRequest {
+  string project_uuid = 1;
+  string file_path = 2; // e.g., "chapter_1.md"
+  string content = 3;   // The raw text of the chapter
+  string author_name = 4;
+  string author_email = 5;
+}
+
+message CommitResponse {
+  bool success = 1;
+  string commit_hash = 2; // Returns the generated Git SHA
+  string message = 3;
+}
