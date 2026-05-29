@@ -46,10 +46,18 @@ func NewServer(store *db.Store) *Server {
 
 func (s *Server) setupRoutes() {
 	// Grouping routes under /api/v1
-	v1 := s.router.Group("/api/v1")
+	// 1. PUBLIC ROUTES (No VIP pass required)
+	public := s.router.Group("/api/v1")
 	{
-		v1.POST("/projects", s.handleCreateProject)
-		v1.POST("/projects/save", s.handleSaveDraft)
+		public.POST("/signup", s.handleSignup)
+		public.POST("/login", s.handleLogin)
+	}
+
+	private := s.router.Group("/api/v1")
+	private.Use(AuthMiddleware())
+	{
+		private.POST("/projects", s.handleCreateProject)
+		private.POST("/projects/save", s.handleSaveDraft)
 	}
 }
 
@@ -62,7 +70,6 @@ func (s *Server) Start(address string) error {
 
 type CreateProjectRequest struct {
 	Title  string `json:"title" binding:"required"`
-	UserID int    `json:"user_id" binding:"required"`
 }
 
 func (s *Server) handleCreateProject(c *gin.Context) {
@@ -72,8 +79,18 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		return
 	}
 
+	// Pull the secure user_id injected by the AuthMiddleware
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
+		return
+	}
+
+	// Cast the userID from an interface{} to an int
+	uid := userID.(int)
+
 	// 1. Save metadata to DB and get a Storage Node assignment
-	project, err := s.db.CreateProject(c.Request.Context(), req.UserID, req.Title)
+	project, err := s.db.CreateProject(c.Request.Context(), uid, req.Title)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project in DB"})
 		return
