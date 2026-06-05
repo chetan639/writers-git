@@ -3,15 +3,17 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-// Project represents the metadata returned to the API
+// Project represents a book/repository in the system
 type Project struct {
-	ID            uuid.UUID
-	Title         string
-	StorageNodeIP string
+	ID            uuid.UUID `json:"id"`
+	Title         string    `json:"title"`
+	StorageNodeIP string    `json:"-"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // CreateProject generates a UUID, assigns a storage node, and saves it to DB
@@ -63,4 +65,35 @@ func (s *Store) GetStorageNodeForProject(ctx context.Context, projectID string) 
 	}
 
 	return grpcAddress, nil
+}
+
+// GetProjectsByUser fetches all books belonging to a specific user, newest first
+func (s *Store) GetProjectsByUser(ctx context.Context, userID int) ([]Project, error) {
+	query := `
+		SELECT id, title, storage_node_id, created_at 
+		FROM projects 
+		WHERE user_id = $1 
+		ORDER BY created_at DESC
+	`
+	
+	// Query executes the SQL and returns multiple rows
+	rows, err := s.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query projects: %w", err)
+	}
+	defer rows.Close() // Always close rows to prevent database memory leaks!
+
+	// Create an empty slice to hold the results
+	projects := make([]Project, 0)
+
+	// Loop through the returned rows and parse them into our struct
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.ID, &p.Title, &p.StorageNodeIP, &p.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan project row: %w", err)
+		}
+		projects = append(projects, p)
+	}
+
+	return projects, nil
 }

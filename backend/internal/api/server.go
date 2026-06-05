@@ -50,6 +50,7 @@ func (s *Server) setupRoutes() {
 	private := s.router.Group("/api/v1")
 	private.Use(AuthMiddleware())
 	{
+		private.GET("/projects", s.handleListProjects)
 		private.POST("/projects", s.handleCreateProject)
 		private.POST("/projects/save", s.handleSaveDraft)
 	}

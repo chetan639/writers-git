@@ -121,3 +121,26 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		"commit_hash": resp.CommitHash,
 	})
 }
+
+
+func (s *Server) handleListProjects(c *gin.Context) {
+	// 1. Pull the secure user_id injected by the AuthMiddleware
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
+		return
+	}
+	uid := userID.(int)
+
+	// 2. Fetch the user's projects from the database
+	projects, err := s.db.GetProjectsByUser(c.Request.Context(), uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
+		return
+	}
+
+	// 3. Return the array of projects to the frontend
+	c.JSON(http.StatusOK, gin.H{
+		"projects": projects,
+	})
+}
