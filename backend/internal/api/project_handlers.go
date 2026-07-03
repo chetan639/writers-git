@@ -19,13 +19,16 @@ type CreateProjectRequest struct {
 func (s *Server) handleCreateProject(c *gin.Context) {
 	var req CreateProjectRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("CreateProject request binding failed: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("CreateProject attempt for title: %s", req.Title)
 
 	// Pull the secure user_id injected by the AuthMiddleware
 	userID, exists := c.Get("user_id")
 	if !exists {
+		log.Printf("CreateProject failed: user_id context missing")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
 		return
 	}
@@ -36,13 +39,16 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 	// 1. Save metadata to DB and get a Storage Node assignment
 	project, err := s.db.CreateProject(c.Request.Context(), uid, req.Title)
 	if err != nil {
+		log.Printf("Failed to create project in DB for user %d: %v", uid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project in DB"})
 		return
 	}
+	log.Printf("Project created in DB with UUID: %s, assigned to Node IP: %s", project.ID.String(), project.StorageNodeIP)
 
 	// Ask the manager for the connection instead of dialing from scratch!
     conn, err := s.connMgr.GetClient(project.StorageNodeIP)
     if err != nil {
+		log.Printf("Failed to get gRPC client for IP %s: %v", project.StorageNodeIP, err)
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gRPC client"})
         return
     }
@@ -57,10 +63,12 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		ProjectUuid: project.ID.String(),
 	})
 	if err != nil {
-		log.Printf("CRITICAL gRPC ERROR: %v", err)
+		log.Printf("CRITICAL gRPC ERROR: InitRepo failed for %s: %v", project.ID.String(), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize git repo"})
 		return
 	}
+
+	log.Printf("Git repository successfully initialized for project UUID: %s", project.ID.String())
 
 	// 4. Return the UUID to the frontend
 	c.JSON(http.StatusOK, gin.H{
@@ -78,13 +86,16 @@ type SaveDraftRequest struct {
 func (s *Server) handleSaveDraft(c *gin.Context) {
 	var req SaveDraftRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("SaveDraft request binding failed: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	log.Printf("SaveDraft attempt for project %s, file: %s", req.ProjectUUID, req.FilePath)
 
 	// Pull the username injected by the AuthMiddleware
 	usernameData, exists := c.Get("username")
 	if !exists {
+		log.Printf("SaveDraft failed: username context missing")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Username context missing"})
 		return
 	}
@@ -94,6 +105,7 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 	// 2. Extract email from context
 	emailData, exists := c.Get("email")
 	if !exists {
+		log.Printf("SaveDraft failed: email context missing")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email context missing"})
 		return
 	}
@@ -102,6 +114,7 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 	// 1. Ask the DB: "Which node holds this project?"
 	nodeIP, err := s.db.GetStorageNodeForProject(c.Request.Context(), req.ProjectUUID)
 	if err != nil {
+		log.Printf("Storage node lookup failed for project %s: %v", req.ProjectUUID, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Project routing not found"})
 		return
 	}
@@ -109,6 +122,7 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 	// 2. Create a gRPC client using NewClient
 	conn, err := grpc.NewClient(nodeIP, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		log.Printf("Failed to configure gRPC client to %s: %v", nodeIP, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to configure gRPC client"})
 		return
 	}
@@ -127,10 +141,11 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		AuthorEmail: authorEmail,
 	})
 	if err != nil {
-		log.Printf("gRPC Error: %v", err)
+		log.Printf("gRPC Error: CommitDraft failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save draft to git"})
 		return
 	}
+	log.Printf("Draft successfully saved for project %s, commit hash: %s", req.ProjectUUID, resp.CommitHash)
 
 	// 4. Return the Git commit hash to the user
 	c.JSON(http.StatusOK, gin.H{
@@ -144,6 +159,7 @@ func (s *Server) handleListProjects(c *gin.Context) {
 	// 1. Pull the secure user_id injected by the AuthMiddleware
 	userID, exists := c.Get("user_id")
 	if !exists {
+		log.Printf("ListProjects failed: user_id context missing")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
 		return
 	}
@@ -152,9 +168,11 @@ func (s *Server) handleListProjects(c *gin.Context) {
 	// 2. Fetch the user's projects from the database
 	projects, err := s.db.GetProjectsByUser(c.Request.Context(), uid)
 	if err != nil {
+		log.Printf("Failed to fetch projects for user %d: %v", uid, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch projects"})
 		return
 	}
+	log.Printf("Successfully fetched %d projects for user %d", len(projects), uid)
 
 	// 3. Return the array of projects to the frontend
 	c.JSON(http.StatusOK, gin.H{

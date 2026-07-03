@@ -3,6 +3,7 @@ package storageserver
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -52,10 +53,12 @@ func (s *Server) getHashedPath(uuid string) string {
 
 // InitRepo creates a new standard git repository
 func (s *Server) InitRepo(ctx context.Context, req *pb.InitRequest) (*pb.InitResponse, error) {
+	log.Printf("InitRepo requested for project UUID: %s", req.ProjectUuid)
 	path := s.getHashedPath(req.ProjectUuid)
 
 	// Create directories if they don't exist
 	if err := os.MkdirAll(path, 0755); err != nil {
+		log.Printf("InitRepo failed to create directory for %s: %v", req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -64,16 +67,20 @@ func (s *Server) InitRepo(ctx context.Context, req *pb.InitRequest) (*pb.InitRes
 	_, err := git.PlainInit(path, false)
 	if err != nil {
 		if err == git.ErrRepositoryAlreadyExists {
+			log.Printf("InitRepo: Repository already exists for %s", req.ProjectUuid)
 			return &pb.InitResponse{Success: true, Message: "Repo already exists"}, nil
 		}
+		log.Printf("InitRepo failed to initialize git repo for %s: %v", req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to init git repo: %w", err)
 	}
 
+	log.Printf("InitRepo successfully initialized repository for %s", req.ProjectUuid)
 	return &pb.InitResponse{Success: true, Message: "Repository initialized"}, nil
 }
 
 // CommitDraft writes the text to a file and creates a git commit
 func (s *Server) CommitDraft(ctx context.Context, req *pb.CommitRequest) (*pb.CommitResponse, error) {
+	log.Printf("CommitDraft requested for project %s, file %s by %s", req.ProjectUuid, req.FilePath, req.AuthorEmail)
 	mu := s.getLock(req.ProjectUuid)
 	mu.Lock()
 	defer mu.Unlock() // Ensure only one commit happens at a time for this specific project
@@ -81,22 +88,26 @@ func (s *Server) CommitDraft(ctx context.Context, req *pb.CommitRequest) (*pb.Co
 	path := s.getHashedPath(req.ProjectUuid)
 	repo, err := git.PlainOpen(path)
 	if err != nil {
+		log.Printf("CommitDraft failed to open repo for %s: %v", req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to open repo: %w", err)
 	}
 
 	worktree, err := repo.Worktree()
 	if err != nil {
+		log.Printf("CommitDraft failed to get worktree for %s: %v", req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to get worktree: %w", err)
 	}
 
 	// Write the raw text content to the filesystem
 	fullFilePath := filepath.Join(path, req.FilePath)
 	if err := os.WriteFile(fullFilePath, []byte(req.Content), 0644); err != nil {
+		log.Printf("CommitDraft failed to write file %s for %s: %v", fullFilePath, req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to write file: %w", err)
 	}
 
 	// Stage the file (equivalent to `git add <file>`)
 	if _, err := worktree.Add(req.FilePath); err != nil {
+		log.Printf("CommitDraft failed to stage file %s for %s: %v", req.FilePath, req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to stage file: %w", err)
 	}
 
@@ -110,9 +121,11 @@ func (s *Server) CommitDraft(ctx context.Context, req *pb.CommitRequest) (*pb.Co
 		},
 	})
 	if err != nil {
+		log.Printf("CommitDraft failed to commit for %s: %v", req.ProjectUuid, err)
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
+	log.Printf("CommitDraft successfully committed for %s with hash %s", req.ProjectUuid, commitHash.String())
 	return &pb.CommitResponse{
 		Success:    true,
 		CommitHash: commitHash.String(),

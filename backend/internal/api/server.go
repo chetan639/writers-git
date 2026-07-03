@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"time"
 
 	"gitwriter/internal/db"
@@ -18,6 +19,7 @@ type Server struct {
 }
 
 func NewServer(store *db.Store) *Server {
+	log.Println("Initializing new API server...")
 	s := &Server{
 		router: gin.Default(),
 		db:     store,
@@ -59,5 +61,10 @@ func (s *Server) setupRoutes() {
 
 // Start runs the Gin web server
 func (s *Server) Start(address string) error {
-	return s.router.Run(address)
+	log.Printf("Starting API server on %s", address)
+	err := s.router.Run(address)
+	if err != nil {
+		log.Printf("Server failed to start: %v", err)
+	}
+	return err
 }
