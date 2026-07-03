@@ -57,6 +57,7 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		ProjectUuid: project.ID.String(),
 	})
 	if err != nil {
+		log.Printf("CRITICAL gRPC ERROR: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize git repo"})
 		return
 	}
@@ -72,7 +73,6 @@ type SaveDraftRequest struct {
 	ProjectUUID string `json:"project_uuid" binding:"required"`
 	FilePath    string `json:"file_path" binding:"required"`
 	Content     string `json:"content" binding:"required"`
-	AuthorName  string `json:"author_name" binding:"required"`
 }
 
 func (s *Server) handleSaveDraft(c *gin.Context) {
@@ -81,6 +81,23 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Pull the username injected by the AuthMiddleware
+	usernameData, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Username context missing"})
+		return
+	}
+	// Cast it to a string
+	authorName := usernameData.(string)
+
+	// 2. Extract email from context
+	emailData, exists := c.Get("email")
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Email context missing"})
+		return
+	}
+	authorEmail := emailData.(string)
 
 	// 1. Ask the DB: "Which node holds this project?"
 	nodeIP, err := s.db.GetStorageNodeForProject(c.Request.Context(), req.ProjectUUID)
@@ -106,8 +123,8 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		ProjectUuid: req.ProjectUUID,
 		FilePath:    req.FilePath,
 		Content:     req.Content,
-		AuthorName:  req.AuthorName,
-		AuthorEmail: "auto@gitwriter.app",
+		AuthorName:  authorName,
+		AuthorEmail: authorEmail,
 	})
 	if err != nil {
 		log.Printf("gRPC Error: %v", err)

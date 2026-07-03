@@ -75,15 +75,29 @@ func (s *Server) handleLogin(c *gin.Context) {
 	}
 
 	// 3. Passwords match! Generate the JWT VIP pass.
-	token, err := auth.GenerateJWT(user.ID, user.Username)
+	token, err := auth.GenerateJWT(user.ID, user.Username, user.Email)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	// 4. Return the token to the frontend
+	// 4. --- NEW: Set the HttpOnly Cookie ---
+	// Parameters: name, value, maxAge (seconds), path, domain, secure (HTTPS only), httpOnly
+	// Note: Set 'secure' to true in production when you have HTTPS!
+	c.SetCookie("gitwriter_jwt", token, 3600*24, "/", "localhost", false, true)
+
+	// We still return a success message, but the frontend doesn't need to manually store anything.
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
-		"token":   token,
+	})
+}
+
+// --- Logout ---
+func (s *Server) handleLogout(c *gin.Context) {
+	// Overwrite the cookie with a blank value and a negative MaxAge to destroy it instantly
+	c.SetCookie("gitwriter_jwt", "", -1, "/", "localhost", false, true)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Logged out successfully",
 	})
 }

@@ -16,6 +16,7 @@ var jwtSecret = []byte("super_secret_gitwriter_key_change_me")
 type Claims struct {
 	UserID   int    `json:"user_id"`
 	Username string `json:"username"`
+	Email    string `json:"email"`
 	jwt.RegisteredClaims
 }
 
@@ -34,12 +35,13 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 // GenerateJWT creates a signed token valid for 24 hours
-func GenerateJWT(userID int, username string) (string, error) {
+func GenerateJWT(userID int, username, email string) (string, error) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	
 	claims := &Claims{
 		UserID:   userID,
 		Username: username,
+		Email:    email,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

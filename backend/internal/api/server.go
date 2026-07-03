@@ -25,7 +25,7 @@ func NewServer(store *db.Store) *Server {
 	}
 
 	s.router.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true, // Allows any frontend to connect (great for local dev)
+		AllowOrigins:     []string{"http://localhost:3000"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -45,6 +45,7 @@ func (s *Server) setupRoutes() {
 	{
 		public.POST("/signup", s.handleSignup)
 		public.POST("/login", s.handleLogin)
+		public.POST("/logout", s.handleLogout)
 	}
 
 	private := s.router.Group("/api/v1")
