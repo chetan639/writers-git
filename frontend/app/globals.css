@@ -1,26 +1,633 @@
 @import "tailwindcss";
+/* Imported here rather than from the component so our editor overrides below
+   win the cascade — EasyMDE's own sheet resets `font: inherit` on CodeMirror. */
+@import "easymde/dist/easymde.min.css";
+
+/* ============================================================================
+   GitWriter design tokens — "Manuscript"
+   A warm, paper-first palette. Ink for weight, a single rust accent for
+   emphasis, and muted greens/reds reserved for revision marks.
+   ========================================================================== */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --paper: #faf8f4;
+  --paper-2: #f2eee6;
+  --surface: #ffffff;
+  --surface-2: #f6f3ec;
+  --surface-hover: #f1ece2;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --ink: #1c1917;
+  --ink-2: #57504a;
+  --ink-3: #8c8177;
+  --ink-inverse: #faf8f4;
+
+  --rule: #e6e0d5;
+  --rule-strong: #d5ccbd;
+
+  --accent: #9c3d24;
+  --accent-hover: #86331d;
+  --accent-soft: #f6e8e1;
+  --accent-ink: #ffffff;
+
+  --add-bg: #dceedf;
+  --add-fg: #1f4d33;
+  --del-bg: #f7e0de;
+  --del-fg: #7a2620;
+
+  --panel: #221d18;
+  --panel-ink: #f0e9df;
+  --panel-ink-2: #a79b8b;
+
+  --ring: #9c3d24;
+  --shadow-1: 0 1px 2px rgba(41, 32, 20, 0.06);
+  --shadow-2: 0 2px 4px rgba(41, 32, 20, 0.05), 0 8px 20px -8px rgba(41, 32, 20, 0.12);
+  --shadow-3: 0 4px 8px rgba(41, 32, 20, 0.06), 0 24px 48px -16px rgba(41, 32, 20, 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --paper: #14120f;
+    --paper-2: #1a1815;
+    --surface: #1c1a17;
+    --surface-2: #23201c;
+    --surface-hover: #2a2621;
+
+    --ink: #ede8df;
+    --ink-2: #b0a89d;
+    --ink-3: #837a70;
+    --ink-inverse: #17150f;
+
+    --rule: #302b26;
+    --rule-strong: #423b34;
+
+    --accent: #e08a63;
+    --accent-hover: #eea27f;
+    --accent-soft: #2e211a;
+    --accent-ink: #17150f;
+
+    --add-bg: #1d3325;
+    --add-fg: #94d6a8;
+    --del-bg: #3b1f1d;
+    --del-fg: #f0a49c;
+
+    --panel: #1e1b17;
+    --panel-ink: #ebe5db;
+    --panel-ink-2: #988e81;
+
+    --ring: #e08a63;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+    --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root[data-theme="dark"] {
+  --paper: #14120f;
+  --paper-2: #1a1815;
+  --surface: #1c1a17;
+  --surface-2: #23201c;
+  --surface-hover: #2a2621;
+
+  --ink: #ede8df;
+  --ink-2: #b0a89d;
+  --ink-3: #837a70;
+  --ink-inverse: #17150f;
+
+  --rule: #302b26;
+  --rule-strong: #423b34;
+
+  --accent: #e08a63;
+  --accent-hover: #eea27f;
+  --accent-soft: #2e211a;
+  --accent-ink: #17150f;
+
+  --add-bg: #1d3325;
+  --add-fg: #94d6a8;
+  --del-bg: #3b1f1d;
+  --del-fg: #f0a49c;
+
+  --panel: #1e1b17;
+  --panel-ink: #ebe5db;
+  --panel-ink-2: #988e81;
+
+  --ring: #e08a63;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-inverse: var(--ink-inverse);
+
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-panel: var(--panel);
+  --color-panel-ink: var(--panel-ink);
+  --color-panel-ink-2: var(--panel-ink-2);
+
+  --color-add-bg: var(--add-bg);
+  --color-add-fg: var(--add-fg);
+  --color-del-bg: var(--del-bg);
+  --color-del-fg: var(--del-fg);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-serif: var(--font-newsreader), Georgia, "Times New Roman", serif;
+
+  --shadow-soft: var(--shadow-1);
+  --shadow-lift: var(--shadow-2);
+  --shadow-float: var(--shadow-3);
+}
+
+/* ============================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--rule);
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  body {
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A faint warmth in the corners so large empty pages don't read as flat. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(70rem 40rem at 8% -10%, color-mix(in oklab, var(--accent) 5%, transparent), transparent 70%),
+      radial-gradient(60rem 40rem at 110% 10%, color-mix(in oklab, var(--accent) 4%, transparent), transparent 70%);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    color: var(--ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input, textarea, button, select {
+    font: inherit;
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--ink-3);
+  }
+
+  /* Chrome paints autofilled fields a hard blue that fights the paper palette.
+     There is no way to set the background directly, so we flood it with an
+     inset shadow and repaint the text. */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--ink);
+    -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+    box-shadow: 0 0 0 1000px var(--surface) inset;
+    caret-color: var(--ink);
+    transition: background-color 100000s ease-in-out 0s;
+  }
+
+  /* Slim, unobtrusive scrollbars that follow the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rule-strong) transparent;
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--rule-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-3);
+    background-clip: content-box;
+  }
+}
+
+/* ============================================================================
+   Components
+   ========================================================================== */
+
+@layer components {
+  .card {
+    background-color: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    box-shadow: var(--shadow-1);
+  }
+
+  .field {
+    width: 100%;
+    background-color: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--rule-strong);
+    border-radius: 10px;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  }
+  .field:hover:not(:disabled) {
+    border-color: color-mix(in oklab, var(--ink-3) 60%, var(--rule-strong));
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 16%, transparent);
+  }
+  .field:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--ink-2);
+    margin-bottom: 0.375rem;
+  }
+
+  /* Small uppercase caption used for metadata rows. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .divider-rule {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--rule), transparent);
+  }
+}
+
+/* ============================================================================
+   Utilities
+   ========================================================================== */
+
+@layer utilities {
+  .animate-rise {
+    animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .animate-fade {
+    animation: fade 300ms ease backwards;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise, .animate-fade { animation: none; }
+    * { transition-duration: 1ms !important; }
+  }
+}
+
+/* ============================================================================
+   Manuscript prose — shared by the editor preview and the diff view
+   ========================================================================== */
+
+.manuscript {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.manuscript h1,
+.manuscript h2,
+.manuscript h3 {
+  font-family: var(--font-display);
+  line-height: 1.25;
+  margin: 1.8em 0 0.6em;
+}
+.manuscript h1 { font-size: 1.9rem; }
+.manuscript h2 { font-size: 1.45rem; }
+.manuscript h3 { font-size: 1.2rem; }
+.manuscript h1:first-child,
+.manuscript h2:first-child,
+.manuscript h3:first-child { margin-top: 0; }
+.manuscript p { margin: 0 0 1.15em; }
+.manuscript blockquote {
+  margin: 1.4em 0;
+  padding-left: 1.15em;
+  border-left: 2px solid var(--accent);
+  color: var(--ink-2);
+  font-style: italic;
+}
+.manuscript ul, .manuscript ol { margin: 0 0 1.15em 1.35em; }
+.manuscript ul { list-style: disc; }
+.manuscript ol { list-style: decimal; }
+.manuscript li { margin-bottom: 0.4em; }
+.manuscript a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.manuscript hr {
+  border: 0;
+  height: 1px;
+  background: var(--rule);
+  margin: 2.4em 0;
+}
+.manuscript code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+.manuscript pre {
+  background: var(--surface-2);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 1em 1.1em;
+  overflow-x: auto;
+  margin: 0 0 1.15em;
+}
+.manuscript pre code { background: none; border: 0; padding: 0; }
+.manuscript img { max-width: 100%; border-radius: 10px; }
+.manuscript table { width: 100%; border-collapse: collapse; margin: 0 0 1.15em; }
+.manuscript th, .manuscript td {
+  border: 1px solid var(--rule);
+  padding: 0.5em 0.7em;
+  text-align: left;
+}
+.manuscript th { background: var(--surface-2); font-weight: 600; }
+
+/* ============================================================================
+   EasyMDE / CodeMirror — restyled as a manuscript page
+   The stock theme is a boxed, bordered form control; we want a quiet sheet of
+   paper with a toolbar that recedes until you reach for it.
+   ========================================================================== */
+
+.EasyMDEContainer {
+  display: flex;
+  flex-direction: column;
+}
+
+.EasyMDEContainer .CodeMirror {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.85;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 2.25rem clamp(1rem, 6vw, 4rem) 4rem;
+  height: auto;
+}
+
+.EasyMDEContainer .CodeMirror-scroll {
+  min-height: inherit;
+}
+
+/* Hold the text to a comfortable measure no matter how wide the window is. */
+.EasyMDEContainer .CodeMirror-lines {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.EasyMDEContainer .CodeMirror-cursor {
+  border-left: 2px solid var(--accent);
+}
+
+.EasyMDEContainer .CodeMirror-selected,
+.EasyMDEContainer .CodeMirror-line::selection,
+.EasyMDEContainer .CodeMirror-line > span::selection {
+  background: color-mix(in oklab, var(--accent) 20%, transparent) !important;
+}
+
+.EasyMDEContainer .CodeMirror-placeholder {
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.EasyMDEContainer .editor-toolbar {
+  position: sticky;
+  /* Tucks under the app header (h-16) and the file bar (h-12) above it. */
+  top: 7rem;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  opacity: 1;
+}
+.EasyMDEContainer .editor-toolbar::before,
+.EasyMDEContainer .editor-toolbar::after {
+  display: none;
+}
+
+.EasyMDEContainer .editor-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-2);
+  background: transparent;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.EasyMDEContainer .editor-toolbar button:hover,
+.EasyMDEContainer .editor-toolbar button:focus-visible {
+  background: var(--surface-hover);
+  border: 0;
+  color: var(--ink);
+}
+.EasyMDEContainer .editor-toolbar button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 0;
+}
+.EasyMDEContainer .editor-toolbar i.separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 0.4rem;
+  border: 0;
+  background: var(--rule);
+}
+/* The stock theme relies on Font Awesome, which we don't ship. Hide the empty
+   glyph node; icons come from the masked ::before rules below. */
+.EasyMDEContainer .editor-toolbar button i.fa {
+  display: none;
+}
+
+.EasyMDEContainer .editor-toolbar.fullscreen {
+  background: var(--surface);
+  backdrop-filter: none;
+}
+
+.EasyMDEContainer .CodeMirror-fullscreen,
+.EasyMDEContainer .editor-preview-side {
+  background: var(--surface);
+}
+
+.EasyMDEContainer .editor-preview,
+.EasyMDEContainer .editor-preview-side {
+  background: var(--surface);
+  padding: 2.25rem clamp(1rem, 6vw, 4rem) 4rem;
+}
+.EasyMDEContainer .editor-preview-side {
+  border-left: 1px solid var(--rule);
+}
+.EasyMDEContainer .editor-preview > *,
+.EasyMDEContainer .editor-preview-side > * {
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.EasyMDEContainer .editor-statusbar {
+  display: none;
+}
+
+/* Syntax hints inside the raw markdown, kept subtle so prose stays readable. */
+.EasyMDEContainer .cm-s-easymde .cm-header-1 { font-size: 1.7em; }
+.EasyMDEContainer .cm-s-easymde .cm-header-2 { font-size: 1.4em; }
+.EasyMDEContainer .cm-s-easymde .cm-header-3 { font-size: 1.2em; }
+.EasyMDEContainer .cm-s-easymde .cm-header {
+  font-family: var(--font-display);
+  line-height: 1.3;
+  color: var(--ink);
+}
+.EasyMDEContainer .cm-s-easymde .cm-quote {
+  color: var(--ink-2);
+  font-style: italic;
+}
+.EasyMDEContainer .cm-s-easymde .cm-link { color: var(--accent); }
+.EasyMDEContainer .cm-s-easymde .cm-url { color: var(--ink-3); }
+.EasyMDEContainer .cm-s-easymde .cm-comment {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+.EasyMDEContainer .cm-s-easymde .cm-formatting {
+  color: var(--ink-3);
+  opacity: 0.6;
+}
+
+/* Toolbar icons: masked inline SVG, so they inherit the button colour and
+   need no icon-font dependency. Buttons carry the tool name as a class. */
+.EasyMDEContainer .editor-toolbar button::before {
+  content: "";
+  width: 17px;
+  height: 17px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.EasyMDEContainer .editor-toolbar button.bold::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.italic::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M19 4h-9M14 20H5M15 4 9 20%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M19 4h-9M14 20H5M15 4 9 20%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.heading::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M6 4v16M18 4v16M6 12h12%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M6 4v16M18 4v16M6 12h12%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.quote::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M17 6H3M21 12H8M21 18H8M3 12v6%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M17 6H3M21 12H8M21 18H8M3 12v6%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.unordered-list::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.ordered-list::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-1.6 2-2.5S5 14 4 14.5%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-1.6 2-2.5S5 14 4 14.5%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.link::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7L11.8 5.2%22%2F%3E%3Cpath d%3D%22M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7L11.8 5.2%22%2F%3E%3Cpath d%3D%22M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.image::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Crect x%3D%223%22 y%3D%223%22 width%3D%2218%22 height%3D%2218%22 rx%3D%222%22%2F%3E%3Ccircle cx%3D%228.5%22 cy%3D%228.5%22 r%3D%221.6%22%2F%3E%3Cpath d%3D%22m21 15-4.6-4.6a2 2 0 0 0-2.8 0L4 20%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Crect x%3D%223%22 y%3D%223%22 width%3D%2218%22 height%3D%2218%22 rx%3D%222%22%2F%3E%3Ccircle cx%3D%228.5%22 cy%3D%228.5%22 r%3D%221.6%22%2F%3E%3Cpath d%3D%22m21 15-4.6-4.6a2 2 0 0 0-2.8 0L4 20%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.code::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22m16 18 6-6-6-6M8 6l-6 6 6 6%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22m16 18 6-6-6-6M8 6l-6 6 6 6%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.preview::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z%22%2F%3E%3Ccircle cx%3D%2212%22 cy%3D%2212%22 r%3D%223%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z%22%2F%3E%3Ccircle cx%3D%2212%22 cy%3D%2212%22 r%3D%223%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.side-by-side::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Crect x%3D%223%22 y%3D%223%22 width%3D%2218%22 height%3D%2218%22 rx%3D%222%22%2F%3E%3Cpath d%3D%22M12 3v18%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Crect x%3D%223%22 y%3D%223%22 width%3D%2218%22 height%3D%2218%22 rx%3D%222%22%2F%3E%3Cpath d%3D%22M12 3v18%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.fullscreen::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Cpath d%3D%22M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3%22%2F%3E%3C%2Fsvg%3E");
+}
+.EasyMDEContainer .editor-toolbar button.guide::before {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Ccircle cx%3D%2212%22 cy%3D%2212%22 r%3D%229.5%22%2F%3E%3Cpath d%3D%22M9.2 9.2a3 3 0 0 1 5.8 1c0 2-2.9 2.6-2.9 4M12 17.2h.01%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 24 24%22 fill%3D%22none%22 stroke%3D%22black%22 stroke-width%3D%221.9%22 stroke-linecap%3D%22round%22 stroke-linejoin%3D%22round%22%3E%3Ccircle cx%3D%2212%22 cy%3D%2212%22 r%3D%229.5%22%2F%3E%3Cpath d%3D%22M9.2 9.2a3 3 0 0 1 5.8 1c0 2-2.9 2.6-2.9 4M12 17.2h.01%22%2F%3E%3C%2Fsvg%3E");
 }

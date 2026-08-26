@@ -1,12 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+'use client';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import dynamic from 'next/dynamic';
-import "easymde/dist/easymde.min.css";
 import DiffVisualizer from './DiffVisualizer';
 import api from '../lib/api';
+import Button from './ui/Button';
+import { CommitIcon, CompareIcon, FileIcon, PenIcon } from './ui/icons';
+import { countWords, formatCount, readingMinutes } from '../lib/text';
 
-const SimpleMdeReact = dynamic(() => import('react-simplemde-editor'), { ssr: false });
+const SimpleMdeReact = dynamic(() => import('react-simplemde-editor'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[60vh] items-center justify-center text-sm text-ink-3">
+      Setting the page…
+    </div>
+  ),
+});
 
 interface WorkspaceProps {
   bookTitle: string;
@@ -22,21 +33,44 @@ export default function Workspace({ bookTitle, lastSavedText, setLastSavedText }
   const [currentText, setCurrentText] = useState(lastSavedText);
   const [isSaving, setIsSaving] = useState(false);
   const [showDiff, setShowDiff] = useState(false);
+  const [lastCommit, setLastCommit] = useState<string | null>(null);
 
-  // Sync editor content when lastSavedText is loaded asynchronously
-  useEffect(() => {
+  // lastSavedText arrives asynchronously (and again after each save). Adjusting
+  // during render — rather than in an effect — avoids a flash of stale text.
+  const [syncedFrom, setSyncedFrom] = useState(lastSavedText);
+  if (syncedFrom !== lastSavedText) {
+    setSyncedFrom(lastSavedText);
     setCurrentText(lastSavedText);
-  }, [lastSavedText]);
+  }
 
   // Stable options reference — prevents SimpleMDE from reinitializing
   // CodeMirror on every render, which would reset the cursor position
   const editorOptions = useMemo(() => ({
     spellChecker: false,
-    minHeight: '500px',
     autofocus: true,
-  }), []);
+    lineWrapping: true,
+    minHeight: '60vh',
+    placeholder: 'Chapter One…\n\nBegin anywhere. Every version you save is kept.',
+    // EasyMDE otherwise injects a stylesheet from a long-dead Font Awesome CDN.
+    // Our toolbar icons are masked SVG in globals.css instead.
+    autoDownloadFontAwesome: false,
+    // Our own status bar below the editor reports words and reading time.
+    status: false,
+    sideBySideFullscreen: false,
+    previewClass: ['editor-preview', 'manuscript'],
+    toolbar: [
+      'bold', 'italic', 'heading', '|',
+      'quote', 'unordered-list', 'ordered-list', '|',
+      'link', 'image', 'code', '|',
+      'preview', 'side-by-side', 'fullscreen',
+      'guide',
+    ],
+  }) as const, []);
 
-
+  const words = countWords(currentText);
+  const savedWords = countWords(lastSavedText);
+  const wordDelta = words - savedWords;
+  const isDirty = currentText !== lastSavedText;
 
   const handleCommit = async () => {
     if (!projectUuid) {
@@ -45,8 +79,8 @@ export default function Workspace({ bookTitle, lastSavedText, setLastSavedText }
     if (!filePath.trim() || !filePath.endsWith('.md')) {
       return toast.error('Please provide a valid file path ending in .md');
     }
-    if (currentText === lastSavedText) {
-      return toast('No changes to commit.', { icon: 'ℹ️' });
+    if (!isDirty) {
+      return toast('Nothing has changed since the last version.', { icon: '✎' });
     }
 
     setIsSaving(true);
@@ -59,72 +93,141 @@ export default function Workspace({ bookTitle, lastSavedText, setLastSavedText }
       });
 
       setLastSavedText(currentText);
-      toast.success(`Committed! Hash: ${response.data.commit_hash}`);
+      setLastCommit(response.data.commit_hash);
+      toast.success('Version saved.');
       setShowDiff(false);
     } catch (error) {
-      toast.error('Failed to commit changes.');
+      toast.error('Failed to save this version.');
       console.error('Commit Error:', error);
     } finally {
       setIsSaving(false);
     }
   };
 
+  // ⌘S / Ctrl+S saves a version — the reflex every writer already has.
+  const commitRef = useRef(handleCommit);
+  useEffect(() => {
+    commitRef.current = handleCommit;
+  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        commitRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
-    <div className="w-full max-w-6xl mx-auto py-8 px-4">
-      {/* Header Area */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">{bookTitle}</h1>
-          <p className="text-xs text-gray-400 mt-1 font-mono">ID: {projectUuid}</p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+      {/* ── Title block ──────────────────────────────────────────────────── */}
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <p className="eyebrow">Manuscript</p>
+          <h1 className="mt-1.5 truncate font-display text-[clamp(1.75rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em]">
+            {bookTitle}
+          </h1>
         </div>
-        
-        <div className="flex gap-4">
-          <button 
+
+        <div className="flex shrink-0 items-center gap-2.5">
+          <Button
+            variant="secondary"
+            size="lg"
             onClick={() => setShowDiff(!showDiff)}
-            className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
+            disabled={!showDiff && !isDirty}
+            title={
+              !isDirty ? 'No changes to compare yet' : 'See what changed since the last version'
+            }
           >
-            {showDiff ? 'Back to Editor' : 'Compare Changes'}
-          </button>
-          
-          <button 
-            onClick={handleCommit}
-            disabled={isSaving}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition disabled:opacity-50 flex items-center gap-2"
-          >
-            {isSaving ? (
-              <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-            ) : null}
-            {isSaving ? 'Committing...' : 'Commit to Git'}
-          </button>
+            {showDiff ? <PenIcon size={16} /> : <CompareIcon size={16} />}
+            {showDiff ? 'Back to writing' : 'Compare'}
+          </Button>
+
+          <Button size="lg" onClick={handleCommit} loading={isSaving} disabled={!isDirty}>
+            {!isSaving && <CommitIcon size={16} />}
+            {isSaving ? 'Saving…' : 'Save version'}
+          </Button>
         </div>
       </div>
 
-      {/* Dynamic Inputs Area */}
-      <div className="bg-white p-4 rounded-t-lg border-t border-l border-r border-gray-200 bg-gray-50">
-        <div className="flex flex-col max-w-xs">
-          <label className="text-xs font-bold text-gray-600 mb-1 uppercase tracking-wider">File Path</label>
-          <input 
-            type="text" 
-            value={filePath} 
+      {/* ── The sheet ────────────────────────────────────────────────────── */}
+      {/* No overflow-hidden here: it would trap the editor's sticky toolbar. */}
+      <div className="card">
+        {/* File bar */}
+        {/* Fixed height (h-12) so the editor toolbar below can stick at a known offset. */}
+        <div className="sticky top-16 z-20 flex h-12 items-center gap-3 rounded-t-[14px] border-b border-rule bg-surface-2 px-4">
+          <FileIcon size={15} className="shrink-0 text-ink-3" />
+          <label htmlFor="file-path" className="sr-only">
+            File this draft is saved to
+          </label>
+          <input
+            id="file-path"
+            type="text"
+            value={filePath}
             onChange={(e) => setFilePath(e.target.value)}
-            className="px-3 py-1 border rounded text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-            placeholder="e.g., chapter_1.md"
+            placeholder="chapter_1.md"
+            title="The file inside your manuscript that this version is saved to"
+            className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-mono text-[13px] text-ink transition-colors hover:border-rule-strong focus:border-accent focus:bg-surface focus:outline-none"
           />
-        </div>
-      </div>
 
-      {/* Editor Area */}
-      <div className="bg-white rounded-b-lg shadow-sm border border-gray-200 p-1 border-t-0">
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+              isDirty
+                ? 'bg-accent-soft text-accent'
+                : 'bg-transparent text-ink-3'
+            }`}
+          >
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${isDirty ? 'bg-accent' : 'bg-ink-3'}`}
+            />
+            <span className="hidden sm:inline">
+              {isDirty ? 'Unsaved changes' : 'All versions saved'}
+            </span>
+          </span>
+        </div>
+
+        {/* Editor or diff */}
         {showDiff ? (
           <DiffVisualizer oldText={lastSavedText} newText={currentText} />
         ) : (
-          <SimpleMdeReact 
+          <SimpleMdeReact
             key={lastSavedText ? 'loaded' : 'empty'}
-            value={currentText} 
+            value={currentText}
             onChange={setCurrentText}
             options={editorOptions}
           />
         )}
+
+        {/* Status bar */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-b-[14px] border-t border-rule bg-surface-2 px-4 py-2.5 text-[12px] text-ink-3">
+          <span className="text-ink-2">
+            <strong className="font-semibold text-ink">{formatCount(words)}</strong>{' '}
+            {words === 1 ? 'word' : 'words'}
+          </span>
+          {wordDelta !== 0 && (
+            <span className={wordDelta > 0 ? 'text-add-fg' : 'text-del-fg'}>
+              {wordDelta > 0 ? '+' : '−'}
+              {formatCount(Math.abs(wordDelta))} since last version
+            </span>
+          )}
+          <span>{readingMinutes(words)} min read</span>
+          <span className="ml-auto flex items-center gap-4">
+            {lastCommit && (
+              <span className="font-mono" title="Latest version">
+                {lastCommit.slice(0, 7)}
+              </span>
+            )}
+            <span className="hidden sm:inline">
+              <kbd className="rounded border border-rule-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] text-ink-2">
+                ⌘S
+              </kbd>{' '}
+              saves a version
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   );
