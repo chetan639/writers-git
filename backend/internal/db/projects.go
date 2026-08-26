@@ -2,10 +2,12 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Project represents a book/repository in the system
@@ -48,25 +50,6 @@ func (s *Store) CreateProject(ctx context.Context, userID int, title string) (*P
 	}, nil
 }
 
-// GetStorageNodeForProject looks up exactly where a specific project is hosted
-func (s *Store) GetStorageNodeForProject(ctx context.Context, projectID string) (string, error) {
-	var grpcAddress string
-	
-	// JOIN the projects and storage_nodes tables to get the IP address
-	query := `
-		SELECT n.grpc_address 
-		FROM projects p
-		JOIN storage_nodes n ON p.storage_node_id = n.id
-		WHERE p.id = $1
-	`
-	err := s.pool.QueryRow(ctx, query, projectID).Scan(&grpcAddress)
-	if err != nil {
-		return "", fmt.Errorf("could not route project %s: %w", projectID, err)
-	}
-
-	return grpcAddress, nil
-}
-
 // GetProjectsByUser fetches all books belonging to a specific user, newest first
 func (s *Store) GetProjectsByUser(ctx context.Context, userID int) ([]Project, error) {
 	query := `
@@ -96,4 +79,31 @@ func (s *Store) GetProjectsByUser(ctx context.Context, userID int) ([]Project, e
 	}
 
 	return projects, nil
+}
+// ErrProjectNotFound is returned when a project either does not exist or is not
+// owned by the requesting user. We deliberately do not distinguish between the two
+// so an attacker cannot probe for the existence of other people's project UUIDs.
+var ErrProjectNotFound = errors.New("project not found")
+
+// GetStorageNodeForUserProject resolves which storage node hosts a project, but only
+// if that project actually belongs to userID. Every routing lookup goes through here so
+// an authenticated user can never reach another writer's repository.
+func (s *Store) GetStorageNodeForUserProject(ctx context.Context, projectID string, userID int) (string, error) {
+	var grpcAddress string
+
+	query := `
+		SELECT n.grpc_address
+		FROM projects p
+		JOIN storage_nodes n ON p.storage_node_id = n.id
+		WHERE p.id = $1 AND p.user_id = $2
+	`
+	err := s.pool.QueryRow(ctx, query, projectID, userID).Scan(&grpcAddress)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrProjectNotFound
+		}
+		return "", fmt.Errorf("could not route project %s: %w", projectID, err)
+	}
+
+	return grpcAddress, nil
 }

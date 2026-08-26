@@ -25,6 +25,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	GitStorage_InitRepo_FullMethodName    = "/storage.GitStorage/InitRepo"
 	GitStorage_CommitDraft_FullMethodName = "/storage.GitStorage/CommitDraft"
+	GitStorage_GetContent_FullMethodName  = "/storage.GitStorage/GetContent"
 )
 
 // GitStorageClient is the client API for GitStorage service.
@@ -37,6 +38,8 @@ type GitStorageClient interface {
 	InitRepo(ctx context.Context, in *InitRequest, opts ...grpc.CallOption) (*InitResponse, error)
 	// Saves a new draft of a chapter as a Git commit.
 	CommitDraft(ctx context.Context, in *CommitRequest, opts ...grpc.CallOption) (*CommitResponse, error)
+	// Reads the latest committed content of a chapter back out of the repo.
+	GetContent(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (*GetContentResponse, error)
 }
 
 type gitStorageClient struct {
@@ -67,6 +70,16 @@ func (c *gitStorageClient) CommitDraft(ctx context.Context, in *CommitRequest, o
 	return out, nil
 }
 
+func (c *gitStorageClient) GetContent(ctx context.Context, in *GetContentRequest, opts ...grpc.CallOption) (*GetContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetContentResponse)
+	err := c.cc.Invoke(ctx, GitStorage_GetContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GitStorageServer is the server API for GitStorage service.
 // All implementations must embed UnimplementedGitStorageServer
 // for forward compatibility.
@@ -77,6 +90,8 @@ type GitStorageServer interface {
 	InitRepo(context.Context, *InitRequest) (*InitResponse, error)
 	// Saves a new draft of a chapter as a Git commit.
 	CommitDraft(context.Context, *CommitRequest) (*CommitResponse, error)
+	// Reads the latest committed content of a chapter back out of the repo.
+	GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error)
 	mustEmbedUnimplementedGitStorageServer()
 }
 
@@ -92,6 +107,9 @@ func (UnimplementedGitStorageServer) InitRepo(context.Context, *InitRequest) (*I
 }
 func (UnimplementedGitStorageServer) CommitDraft(context.Context, *CommitRequest) (*CommitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CommitDraft not implemented")
+}
+func (UnimplementedGitStorageServer) GetContent(context.Context, *GetContentRequest) (*GetContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetContent not implemented")
 }
 func (UnimplementedGitStorageServer) mustEmbedUnimplementedGitStorageServer() {}
 func (UnimplementedGitStorageServer) testEmbeddedByValue()                    {}
@@ -150,6 +168,24 @@ func _GitStorage_CommitDraft_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GitStorage_GetContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GitStorageServer).GetContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GitStorage_GetContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GitStorageServer).GetContent(ctx, req.(*GetContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GitStorage_ServiceDesc is the grpc.ServiceDesc for GitStorage service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -164,6 +200,10 @@ var GitStorage_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CommitDraft",
 			Handler:    _GitStorage_CommitDraft_Handler,
+		},
+		{
+			MethodName: "GetContent",
+			Handler:    _GitStorage_GetContent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

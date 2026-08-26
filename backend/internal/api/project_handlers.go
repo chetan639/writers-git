@@ -2,14 +2,18 @@ package api
 
 import (
 	"context"
-	"gitwriter/pb"
+	"errors"
 	"log"
 	"net/http"
 	"time"
 
+	"gitwriter/internal/db"
+	"gitwriter/pb"
+
 	"github.com/gin-gonic/gin"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type CreateProjectRequest struct {
@@ -90,9 +94,15 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// Reject junk before it ever reaches Postgres or a storage node
+	if _, err := uuid.Parse(req.ProjectUUID); err != nil {
+		log.Printf("SaveDraft rejected malformed project id %q: %v", req.ProjectUUID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project id"})
+		return
+	}
 	log.Printf("SaveDraft attempt for project %s, file: %s", req.ProjectUUID, req.FilePath)
 
-	// Pull the username injected by the AuthMiddleware
+	// 1. Pull the username injected by the AuthMiddleware
 	usernameData, exists := c.Get("username")
 	if !exists {
 		log.Printf("SaveDraft failed: username context missing")
@@ -111,26 +121,39 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 	}
 	authorEmail := emailData.(string)
 
-	// 1. Ask the DB: "Which node holds this project?"
-	nodeIP, err := s.db.GetStorageNodeForProject(c.Request.Context(), req.ProjectUUID)
+	// 3. Extract the secure user_id so we can prove the writer owns this project
+	userID, exists := c.Get("user_id")
+	if !exists {
+		log.Printf("SaveDraft failed: user_id context missing")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
+		return
+	}
+	uid := userID.(int)
+
+	// 4. Ask the DB which node holds this project - and confirm the user actually owns it
+	nodeIP, err := s.db.GetStorageNodeForUserProject(c.Request.Context(), req.ProjectUUID, uid)
 	if err != nil {
+		if errors.Is(err, db.ErrProjectNotFound) {
+			log.Printf("SaveDraft denied: project %s not found for user %d", req.ProjectUUID, uid)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
 		log.Printf("Storage node lookup failed for project %s: %v", req.ProjectUUID, err)
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project routing not found"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Project routing failed"})
 		return
 	}
 
-	// 2. Create a gRPC client using NewClient
-	conn, err := grpc.NewClient(nodeIP, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// 5. Reuse the pooled gRPC connection to that node
+	conn, err := s.connMgr.GetClient(nodeIP)
 	if err != nil {
-		log.Printf("Failed to configure gRPC client to %s: %v", nodeIP, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to configure gRPC client"})
+		log.Printf("Failed to get gRPC client for IP %s: %v", nodeIP, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gRPC client"})
 		return
 	}
-	defer conn.Close()
 	grpcClient := pb.NewGitStorageClient(conn)
 
-	// 3. Send the text to be committed
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// 6. Send the text to be committed
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
 	resp, err := grpcClient.CommitDraft(ctx, &pb.CommitRequest{
@@ -141,13 +164,23 @@ func (s *Server) handleSaveDraft(c *gin.Context) {
 		AuthorEmail: authorEmail,
 	})
 	if err != nil {
-		log.Printf("gRPC Error: CommitDraft failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save draft to git"})
+		// Map the storage node's gRPC status onto a sensible HTTP status
+		switch status.Code(err) {
+		case codes.InvalidArgument:
+			log.Printf("SaveDraft rejected file path %q for %s: %v", req.FilePath, req.ProjectUUID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file path"})
+		case codes.NotFound:
+			log.Printf("SaveDraft: repository missing for project %s: %v", req.ProjectUUID, err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project repository not found"})
+		default:
+			log.Printf("gRPC Error: CommitDraft failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save draft to git"})
+		}
 		return
 	}
 	log.Printf("Draft successfully saved for project %s, commit hash: %s", req.ProjectUUID, resp.CommitHash)
 
-	// 4. Return the Git commit hash to the user
+	// 7. Return the Git commit hash to the user
 	c.JSON(http.StatusOK, gin.H{
 		"message":     resp.Message,
 		"commit_hash": resp.CommitHash,
@@ -177,5 +210,89 @@ func (s *Server) handleListProjects(c *gin.Context) {
 	// 3. Return the array of projects to the frontend
 	c.JSON(http.StatusOK, gin.H{
 		"projects": projects,
+	})
+}
+// handleGetProjectContent serves GET /projects/:id/content?file_path=chapter_1.md
+// It routes the read to whichever storage node owns the project and returns the
+// latest committed text for that chapter.
+func (s *Server) handleGetProjectContent(c *gin.Context) {
+	projectUUID := c.Param("id")
+
+	// Reject junk before it ever reaches Postgres or a storage node
+	if _, err := uuid.Parse(projectUUID); err != nil {
+		log.Printf("GetContent rejected malformed project id %q: %v", projectUUID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project id"})
+		return
+	}
+
+	// Default to the first chapter so the editor can open a fresh project with no query param
+	filePath := c.DefaultQuery("file_path", "chapter_1.md")
+
+	// Pull the secure user_id injected by the AuthMiddleware
+	userID, exists := c.Get("user_id")
+	if !exists {
+		log.Printf("GetContent failed: user_id context missing")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User context missing"})
+		return
+	}
+	uid := userID.(int)
+	log.Printf("GetContent attempt for project %s, file: %s by user %d", projectUUID, filePath, uid)
+
+	// 1. Ask the DB which node holds this project - and confirm the user actually owns it
+	nodeIP, err := s.db.GetStorageNodeForUserProject(c.Request.Context(), projectUUID, uid)
+	if err != nil {
+		if errors.Is(err, db.ErrProjectNotFound) {
+			log.Printf("GetContent denied: project %s not found for user %d", projectUUID, uid)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			return
+		}
+		log.Printf("Storage node lookup failed for project %s: %v", projectUUID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Project routing failed"})
+		return
+	}
+
+	// 2. Reuse the pooled gRPC connection to that node
+	conn, err := s.connMgr.GetClient(nodeIP)
+	if err != nil {
+		log.Printf("Failed to get gRPC client for IP %s: %v", nodeIP, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get gRPC client"})
+		return
+	}
+	grpcClient := pb.NewGitStorageClient(conn)
+
+	// 3. Read the content back out of Git
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	resp, err := grpcClient.GetContent(ctx, &pb.GetContentRequest{
+		ProjectUuid: projectUUID,
+		FilePath:    filePath,
+	})
+	if err != nil {
+		// Map the storage node's gRPC status onto a sensible HTTP status
+		switch status.Code(err) {
+		case codes.InvalidArgument:
+			log.Printf("GetContent rejected file path %q for %s: %v", filePath, projectUUID, err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file path"})
+		case codes.NotFound:
+			log.Printf("GetContent: repository missing for project %s: %v", projectUUID, err)
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project repository not found"})
+		default:
+			log.Printf("gRPC Error: GetContent failed for %s: %v", projectUUID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load draft from git"})
+		}
+		return
+	}
+
+	log.Printf("Content loaded for project %s, file %s (exists=%t, commit=%s)", projectUUID, filePath, resp.Exists, resp.CommitHash)
+
+	// 4. Hand the text back to the editor. A brand new project legitimately has no
+	// content yet, so that is a 200 with an empty body rather than a 404.
+	c.JSON(http.StatusOK, gin.H{
+		"project_uuid": projectUUID,
+		"file_path":    filePath,
+		"content":      resp.Content,
+		"exists":       resp.Exists,
+		"commit_hash":  resp.CommitHash,
 	})
 }

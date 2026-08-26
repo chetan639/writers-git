@@ -14,6 +14,9 @@ service GitStorage {
   
   // Saves a new draft of a chapter as a Git commit.
   rpc CommitDraft(CommitRequest) returns (CommitResponse);
+
+  // Reads the latest committed content of a chapter back out of the repo.
+  rpc GetContent(GetContentRequest) returns (GetContentResponse);
 }
 
 // --- Messages for InitRepo ---
@@ -42,4 +45,19 @@ message CommitResponse {
   bool success = 1;
   string commit_hash = 2; // Returns the generated Git SHA
   string message = 3;
+}
+
+// --- Messages for GetContent ---
+
+message GetContentRequest {
+  string project_uuid = 1;
+  string file_path = 2; // e.g., "chapter_1.md"
+}
+
+message GetContentResponse {
+  bool success = 1;
+  string content = 2;     // The raw text of the chapter at HEAD
+  bool exists = 3;        // False when the repo has no commit for this file yet
+  string commit_hash = 4; // The HEAD commit the content was read from
+  string message = 5;
 }

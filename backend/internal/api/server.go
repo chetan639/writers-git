@@ -56,6 +56,7 @@ func (s *Server) setupRoutes() {
 		private.GET("/projects", s.handleListProjects)
 		private.POST("/projects", s.handleCreateProject)
 		private.POST("/projects/save", s.handleSaveDraft)
+		private.GET("/projects/:id/content", s.handleGetProjectContent)
 	}
 }
 

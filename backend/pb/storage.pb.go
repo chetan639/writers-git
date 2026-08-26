@@ -258,6 +258,134 @@ func (x *CommitResponse) GetMessage() string {
 	return ""
 }
 
+type GetContentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectUuid   string                 `protobuf:"bytes,1,opt,name=project_uuid,json=projectUuid,proto3" json:"project_uuid,omitempty"`
+	FilePath      string                 `protobuf:"bytes,2,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"` // e.g., "chapter_1.md"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetContentRequest) Reset() {
+	*x = GetContentRequest{}
+	mi := &file_pb_storage_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetContentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetContentRequest) ProtoMessage() {}
+
+func (x *GetContentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_storage_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetContentRequest.ProtoReflect.Descriptor instead.
+func (*GetContentRequest) Descriptor() ([]byte, []int) {
+	return file_pb_storage_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetContentRequest) GetProjectUuid() string {
+	if x != nil {
+		return x.ProjectUuid
+	}
+	return ""
+}
+
+func (x *GetContentRequest) GetFilePath() string {
+	if x != nil {
+		return x.FilePath
+	}
+	return ""
+}
+
+type GetContentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`                         // The raw text of the chapter at HEAD
+	Exists        bool                   `protobuf:"varint,3,opt,name=exists,proto3" json:"exists,omitempty"`                          // False when the repo has no commit for this file yet
+	CommitHash    string                 `protobuf:"bytes,4,opt,name=commit_hash,json=commitHash,proto3" json:"commit_hash,omitempty"` // The HEAD commit the content was read from
+	Message       string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetContentResponse) Reset() {
+	*x = GetContentResponse{}
+	mi := &file_pb_storage_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetContentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetContentResponse) ProtoMessage() {}
+
+func (x *GetContentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_storage_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetContentResponse.ProtoReflect.Descriptor instead.
+func (*GetContentResponse) Descriptor() ([]byte, []int) {
+	return file_pb_storage_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetContentResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *GetContentResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *GetContentResponse) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
+func (x *GetContentResponse) GetCommitHash() string {
+	if x != nil {
+		return x.CommitHash
+	}
+	return ""
+}
+
+func (x *GetContentResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_pb_storage_proto protoreflect.FileDescriptor
 
 const file_pb_storage_proto_rawDesc = "" +
@@ -279,11 +407,23 @@ const file_pb_storage_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1f\n" +
 	"\vcommit_hash\x18\x02 \x01(\tR\n" +
 	"commitHash\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage2\x85\x01\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\"S\n" +
+	"\x11GetContentRequest\x12!\n" +
+	"\fproject_uuid\x18\x01 \x01(\tR\vprojectUuid\x12\x1b\n" +
+	"\tfile_path\x18\x02 \x01(\tR\bfilePath\"\x9b\x01\n" +
+	"\x12GetContentResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x16\n" +
+	"\x06exists\x18\x03 \x01(\bR\x06exists\x12\x1f\n" +
+	"\vcommit_hash\x18\x04 \x01(\tR\n" +
+	"commitHash\x12\x18\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage2\xcc\x01\n" +
 	"\n" +
 	"GitStorage\x127\n" +
 	"\bInitRepo\x12\x14.storage.InitRequest\x1a\x15.storage.InitResponse\x12>\n" +
-	"\vCommitDraft\x12\x16.storage.CommitRequest\x1a\x17.storage.CommitResponseB\x06Z\x04./pbb\x06proto3"
+	"\vCommitDraft\x12\x16.storage.CommitRequest\x1a\x17.storage.CommitResponse\x12E\n" +
+	"\n" +
+	"GetContent\x12\x1a.storage.GetContentRequest\x1a\x1b.storage.GetContentResponseB\x06Z\x04./pbb\x06proto3"
 
 var (
 	file_pb_storage_proto_rawDescOnce sync.Once
@@ -297,20 +437,24 @@ func file_pb_storage_proto_rawDescGZIP() []byte {
 	return file_pb_storage_proto_rawDescData
 }
 
-var file_pb_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pb_storage_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pb_storage_proto_goTypes = []any{
-	(*InitRequest)(nil),    // 0: storage.InitRequest
-	(*InitResponse)(nil),   // 1: storage.InitResponse
-	(*CommitRequest)(nil),  // 2: storage.CommitRequest
-	(*CommitResponse)(nil), // 3: storage.CommitResponse
+	(*InitRequest)(nil),        // 0: storage.InitRequest
+	(*InitResponse)(nil),       // 1: storage.InitResponse
+	(*CommitRequest)(nil),      // 2: storage.CommitRequest
+	(*CommitResponse)(nil),     // 3: storage.CommitResponse
+	(*GetContentRequest)(nil),  // 4: storage.GetContentRequest
+	(*GetContentResponse)(nil), // 5: storage.GetContentResponse
 }
 var file_pb_storage_proto_depIdxs = []int32{
 	0, // 0: storage.GitStorage.InitRepo:input_type -> storage.InitRequest
 	2, // 1: storage.GitStorage.CommitDraft:input_type -> storage.CommitRequest
-	1, // 2: storage.GitStorage.InitRepo:output_type -> storage.InitResponse
-	3, // 3: storage.GitStorage.CommitDraft:output_type -> storage.CommitResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	4, // 2: storage.GitStorage.GetContent:input_type -> storage.GetContentRequest
+	1, // 3: storage.GitStorage.InitRepo:output_type -> storage.InitResponse
+	3, // 4: storage.GitStorage.CommitDraft:output_type -> storage.CommitResponse
+	5, // 5: storage.GitStorage.GetContent:output_type -> storage.GetContentResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -327,7 +471,7 @@ func file_pb_storage_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_storage_proto_rawDesc), len(file_pb_storage_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
